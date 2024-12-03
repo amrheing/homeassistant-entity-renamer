@@ -1,6 +1,10 @@
-# HomeAssistant Entity Renamer
+# HomeAssistant Entity Renamer with input file
 
 This project provides a Python script that allows you to list and rename entities in HomeAssistant based on regular expressions. It leverages the HomeAssistant API and WebSockets to interact with the HomeAssistant server.
+
+This is based on 
+https://github.com/saladpanda/homeassistant-entity-renamer
+special thanks for the start :-)
 
 The `homeassistant-entity-renamer.py` script provides the following functionality:
 
@@ -9,19 +13,25 @@ The `homeassistant-entity-renamer.py` script provides the following functionalit
 - Preserves the history of renamed entities since it uses the same code path for renaming as the HomeAssistant UI (which preserves history since the release 2022.4). See [this websocket callback](https://github.com/home-assistant/core/blob/2023.7.2/homeassistant/components/config/entity_registry.py#L147).
 
 
-Tested on HomeAssistant 2023.7.2.
+Tested on HomeAssistant 2024.11.3.
 
 ## Requirements
 
 - Python 3.6 or above
-- Packages listed in `requirements.txt`
+- Packages listed in `requirements.txt` or can be installed by `install_requirements.sh`
 
 ## Usage
 
 1. Install the required packages by running the following command:
+   in the newer python implementations you need to install via apt, no more with pip.
    ```
    pip install -r requirements.txt
    ```
+   or:
+   ````
+   install_requirements.sh
+   ````
+
 
 2. Rename `config.py.example` to `config.py` and modify the configuration variables according to your HomeAssistant setup.
 

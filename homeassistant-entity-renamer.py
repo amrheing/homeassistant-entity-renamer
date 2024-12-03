@@ -9,6 +9,7 @@ import requests
 import tabulate
 import ssl
 import websocket
+import sys
 
 tabulate.PRESERVE_WHITESPACE = True
 
@@ -84,8 +85,7 @@ def list_entities(regex=None):
         print(f'Error: {response.status_code} - {response.text}')
         return []
 
-
-def process_entities(entity_data, search_regex, replace_regex=None, output_csv=None):
+def create_rename_data(entity_data, search_regex, replace_regex=None):
     rename_data = []
     if replace_regex is not None:
         for friendly_name, entity_id in entity_data:
@@ -93,6 +93,11 @@ def process_entities(entity_data, search_regex, replace_regex=None, output_csv=N
             rename_data.append((friendly_name, entity_id, new_entity_id))
     else:
         rename_data = [(friendly_name, entity_id, "") for friendly_name, entity_id in entity_data]
+    return rename_data
+
+
+def process_entities(entity_data, search_regex, replace_regex=None, output_csv=None, input=None):
+    rename_data = create_rename_data(entity_data, search_regex, replace_regex)
 
     # Print the table with friendly name and entity ID
     table = [("Friendly Name", "Current Entity ID", "New Entity ID")] + align_strings(rename_data)
@@ -110,14 +115,15 @@ def process_entities(entity_data, search_regex, replace_regex=None, output_csv=N
     if replace_regex is None:
         return
     
-    answer = input("\nDo you want to proceed with renaming the entities? (y/N): ")
-    if answer.lower() not in ["y", "yes"]:
-        print("Renaming process aborted.")
-        return
+    if input != None:
+        answer = input("\nDo you want to proceed with renaming the entities? (y/N): ")
+        if answer.lower() not in ["y", "yes"]:
+            print("Renaming process aborted.")
+            return
 
     rename_entities(rename_data)
     
-def rename_entities(rename_data):
+def rename_entities(rename_data, test=False):
     websocket_url = f'ws{TLS_S}://{config.HOST}/api/websocket'
     sslopt = {"cert_reqs": ssl.CERT_NONE} if not config.SSL_VERIFY else {}
     ws = websocket.WebSocket(sslopt=sslopt)
@@ -142,15 +148,42 @@ def rename_entities(rename_data):
             "entity_id": entity_id,
             "new_entity_id": new_entity_id
         })
-        ws.send(entity_registry_update_msg)
-        update_result = ws.recv()
-        update_result = json.loads(update_result)
-        if update_result["success"]:
-            print(f"Entity '{entity_id}' renamed to '{new_entity_id}' successfully!")
+        if not test:
+            print(f"try to rename {entity_id}")
+            ws.send(entity_registry_update_msg)
+            update_result = ws.recv()
+            update_result = json.loads(update_result)
+            if update_result["success"]:
+                print(f"Entity '{entity_id}' renamed to '{new_entity_id}' successfully!")
+            else:
+                print(f"Failed to rename entity '{entity_id}': {update_result['error']['message']}")
         else:
-            print(f"Failed to rename entity '{entity_id}': {update_result['error']['message']}")
+            print(f"Testmode: {entity_registry_update_msg}")
 
     ws.close()
+    
+def process_file(input=None, test=False, counter=0 ):
+    with open(input, newline='') as csvfile:
+        data = csv.reader(csvfile, delimiter=';')
+        n: int = 0
+        count: int = int(counter)
+        for row in data:
+            if count != 0 and count == n:
+                sys.exit(0)
+            old = row[1]
+            new = row[2]
+            entity_data = list_entities(old)
+            rename_data = create_rename_data(entity_data, old, new)
+            n = n + 1
+            if old != new:
+                entity_data = list_entities(old)
+                if entity_data:
+                    rename_data = create_rename_data(entity_data, old, new)
+                    rename_entities(rename_data, args.test)
+                else:
+                    print(f"No entities found for: {old}")
+            else:
+                print("No diff between old and new entity_id")
 
 
 if __name__ == "__main__":
@@ -158,14 +191,23 @@ if __name__ == "__main__":
     parser.add_argument('--search', dest='search_regex', help='Regular expression for search. Note: Only searches entity IDs.')
     parser.add_argument('--replace', dest='replace_regex', help='Regular expression for replace')
     parser.add_argument('--output-csv', dest='output_csv', help='Output preview table to CSV.')
+    parser.add_argument('--input', dest="input", default=None, help='Input file for renaming.')
+    parser.add_argument('-t', '--test', default=False, action='store_true', help='Testmode for input file mode')
+    parser.add_argument('-c', '--count', default=0,  help='Counter for filemode')
     args = parser.parse_args()
-
-    if args.search_regex:
+    
+    print(args)
+    
+    if args.input != None:
+        process_file(args.input, args.test, args.count)
+        
+    elif args.search_regex:
         entity_data = list_entities(args.search_regex)
 
         if entity_data:
-            process_entities(entity_data, args.search_regex, args.replace_regex, args.output_csv)
+            process_entities(entity_data, args.search_regex, args.replace_regex, args.output_csv, args.input)
         else:
             print("No entities found matching the search regex.")
+            sys.exit(99)
     else:
         parser.print_help()
